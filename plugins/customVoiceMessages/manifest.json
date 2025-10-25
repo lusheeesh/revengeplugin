@@ -1,18 +1,20 @@
 {
-    "name": "Custom Voice Messages V2",
-    "description": "Allows Sending any audio as a voice message but better.",
-    "authors": [
-        {
-            "name": "Dz",
-            "id": "1034579679526526976"
-        },
-        {
-            "name": "シグマ sguma",
-            "id": "737597276339437578"
-        }
-    ],
-    "main": "src/index.ts",
-    "vendetta": {
-        "icon": "voice_bar_mute_off"
+  "name": "Custom Voice Messages V2",
+  "description": "Allows sending any audio as a voice message, with better accuracy and features.",
+  "authors": [
+    {
+      "name": "Dz",
+      "id": "1034579679526526976"
+    },
+    {
+      "name": "シグマ sguma",
+      "id": "737597276339437578"
     }
+  ],
+  "version": "2.0.0",
+  "main": "index.js",
+  "vendetta": {
+    "icon": "voice_bar_mute_off",
+    "minApiVersion": 2
+  }
 }
