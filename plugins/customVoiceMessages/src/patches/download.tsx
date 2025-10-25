@@ -1,46 +1,87 @@
-import { before, after } from "@vendetta/patcher"
-import { getAssetIDByName as getAssetId } from "@vendetta/ui/assets"
-import { findByProps } from "@vendetta/metro"
+import { before, after } from "@vendetta/patcher";
+import { getAssetIDByName as getAssetId } from "@vendetta/ui/assets";
+import { findByProps } from "@vendetta/metro";
 import { findInReactTree } from "@vendetta/utils";
-import { React, clipboard } from "@vendetta/metro/common"
-import { Forms } from "@vendetta/ui/components"
+import { React, clipboard } from "@vendetta/metro/common";
+import { Forms } from "@vendetta/ui/components";
 import CoolRow from "../components/CoolRow";
 
-const ActionSheet = findByProps("openLazy", "hideActionSheet")
+const ActionSheet = findByProps("openLazy", "hideActionSheet");
+const MediaDownloader = findByProps("downloadMediaAsset");
+const { hideActionSheet } = findByProps("hideActionSheet");
 
-export default () => before("openLazy", ActionSheet, (ctx) => {
-    const [component, args, actionMessage] = ctx
-    const message = actionMessage?.message;
-    if (args !== "MessageLongPressActionSheet" || !message) return;
-    component.then(instance => {
-        const unpatch = after("default", instance, (_, component) => {
-            React.useEffect(() => () => { unpatch() }, [])
-            const buttons = findInReactTree(
-                component,
-                (x) => x?.[0]?.type?.name === "ButtonRow"
-            );
-            if (!buttons) return component;
+/**
+ * ✅ Helper: safely get a voice message attachment.
+ */
+function getVoiceAttachment(message: any) {
+    if (!message?.attachments?.length) return null;
+    const audio = message.attachments.find(a =>
+        a?.content_type?.startsWith?.("audio") || a?.filename?.endsWith?.(".ogg")
+    );
+    return audio ?? null;
+}
 
-            if (message.hasFlag(8192)) {
-                buttons.splice(5, 0,
+export default () =>
+    before("openLazy", ActionSheet, (ctx) => {
+        const [sheetType, args, actionData] = ctx;
+        const message = actionData?.message;
+
+        // Only patch message long-press sheets
+        if (args !== "MessageLongPressActionSheet" || !message) return;
+
+        // Lazy-loaded component promise
+        sheetType.then((instance) => {
+            const unpatch = after("default", instance, (_, comp) => {
+                React.useEffect(() => () => unpatch?.(), []); // Clean unpatch on unmount
+
+                // Find the action button list within the sheet
+                const buttons = findInReactTree(comp, (x) =>
+                    Array.isArray(x) && x[0]?.type?.name === "ButtonRow"
+                );
+                if (!buttons) return comp;
+
+                const voiceAttachment = getVoiceAttachment(message);
+                if (!message.hasFlag?.(8192) || !voiceAttachment) return comp;
+
+                // Insert custom options cleanly (positions adjusted for safety)
+                const insertIndex = Math.min(buttons.length, 5);
+
+                const options = [
                     <CoolRow
+                        key="vm-download"
                         label="Download Voice Message"
                         icon={getAssetId("ic_download_24px")}
                         onPress={async () => {
-                            await findByProps("downloadMediaAsset").downloadMediaAsset(message.attachments[0].url, 0)
-                            findByProps("hideActionSheet").hideActionSheet()
+                            try {
+                                await MediaDownloader.downloadMediaAsset(
+                                    voiceAttachment.url,
+                                    0
+                                );
+                            } catch (err) {
+                                console.error(
+                                    "[VM Download] Failed to download voice message:",
+                                    err
+                                );
+                            } finally {
+                                hideActionSheet();
+                            }
                         }}
-                    />)
-                buttons.splice(6, 0,
+                    />,
                     <CoolRow
+                        key="vm-copy"
                         label="Copy Voice Message URL"
                         icon={getAssetId("copy")}
-                        onPress={async () => {
-                            clipboard.setString(message.attachments[0].url)
-                            findByProps("hideActionSheet").hideActionSheet()
+                        onPress={() => {
+                            clipboard.setString(voiceAttachment.url);
+                            hideActionSheet();
                         }}
-                    />)
-            }
-        })
-    })
-})
+                    />,
+                ];
+
+                // Insert both buttons back-to-back
+                buttons.splice(insertIndex, 0, ...options);
+
+                return comp;
+            });
+        });
+    });
